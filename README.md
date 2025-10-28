@@ -1,6 +1,6 @@
 🧾 AI-Powered Tax Compliance Automation Workflow
 
-This workflow automates the entire tax return compliance process — from reading the latest filings to generating and emailing smart AI reports.
+This workflow automates the entire tax return compliance process from reading the latest filings to generating and emailing smart AI reports.
 It’s designed for tax teams, accountants, or government departments to save hours of manual work and eliminate reporting errors.
 
 ⚙️ How It Works
@@ -18,7 +18,7 @@ Reads the current tax returns sheet.
 Loads previous filings for comparison.
 
 Compare Records:
-Detects differences between current and past records — identifying missing or late returns automatically.
+Detects differences between current and past records, identifying missing or late returns automatically.
 
 AI Processing:
 
@@ -70,5 +70,5 @@ Gmail Node (automated notifications)
 
 Google Sheets (data storage & updates)
 
-Developer 
+Developed By:
 Umme Farwa
