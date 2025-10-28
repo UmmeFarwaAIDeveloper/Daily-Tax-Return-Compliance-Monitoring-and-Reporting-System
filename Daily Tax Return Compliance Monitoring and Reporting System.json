@@ -1,0 +1,499 @@
+{
+  "name": "Daily Tax Return Compliance Monitoring and Reporting System",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-2",
+              "name": "historicalSheetId",
+              "value": "1uZsY2rdbggyQPsxOe0grfvTW-To1ankoQpTipaOgIao",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "=reportSheetId",
+              "value": "1uZsY2rdbggyQPsxOe0grfvTW-To1ankoQpTipaOgIao",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "officerEmail",
+              "value": "am6592746@gmail.com",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b75fc449-559f-4f8c-b015-5e351106a420",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -176,
+        2960
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.historicalSheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "historicalSheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZsY2rdbggyQPsxOe0grfvTW-To1ankoQpTipaOgIao/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "43046a4c-74b5-4378-9d3b-78b8595741a4",
+      "name": "Load Previous Filings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        48,
+        3232
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0gBRHWN5k3buhvUH",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "CNIC",
+              "field2": "CNIC"
+            }
+          ]
+        },
+        "resolve": "preferInput2",
+        "fuzzyCompare": true,
+        "options": {
+          "disableDotNotation": true
+        }
+      },
+      "id": "99b176a5-9760-4139-aafc-60c3fb57d275",
+      "name": "Compare Current vs Previous",
+      "type": "n8n-nodes-base.compareDatasets",
+      "typeVersion": 2.3,
+      "position": [
+        272,
+        2880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze comparison results and detect missing or late returns\n// Handles cases with or without historical data\n\nconst currentData = $input.all();\nconst missingReturns = [];\nconst lateReturns = [];\nconst onTimeReturns = [];\nlet totalTaxCollected = 0;\nlet totalReturns = 0;\n\n// Check if we have comparison data (with historical) or just current data\nconst hasHistoricalData = currentData.some(item => \n  item.json.status !== undefined || \n  item.json.inPrevious !== undefined || \n  item.json.inCurrent !== undefined\n);\n\nif (hasHistoricalData) {\n  // Process comparison data (original logic)\n  for (const item of currentData) {\n    const data = item.json;\n    \n    // Check if this is a missing return (in historical but not in current)\n    if (data.status === 'removed' || (data.inPrevious === true && data.inCurrent === false)) {\n      missingReturns.push({\n        taxpayerId: data.taxpayerId || data.id || data.CNIC,\n        taxpayerName: data.taxpayerName || data.name || data['Taxpayer Name'],\n        lastFilingDate: data.lastFilingDate || data['Filing Date'],\n        status: 'Missing',\n        daysOverdue: Math.floor((new Date() - new Date(data.expectedFilingDate || data.lastFilingDate || data['Filing Date'])) / (1000 * 60 * 60 * 24))\n      });\n    }\n    // Check if this is a late return\n    else if (data.filingDate || data['Filing Date']) {\n      const filingDate = new Date(data.filingDate || data['Filing Date']);\n      const dueDate = data.dueDate ? new Date(data.dueDate) : null;\n      \n      if (dueDate) {\n        const daysLate = Math.floor((filingDate - dueDate) / (1000 * 60 * 60 * 24));\n        \n        if (daysLate > 0) {\n          lateReturns.push({\n            taxpayerId: data.taxpayerId || data.id || data.CNIC,\n            taxpayerName: data.taxpayerName || data.name || data['Taxpayer Name'],\n            filingDate: data.filingDate || data['Filing Date'],\n            dueDate: data.dueDate,\n            daysLate: daysLate,\n            taxAmount: data.taxAmount || data['Tax Paid (PKR)'] || 0,\n            status: 'Late'\n          });\n          totalTaxCollected += (data.taxAmount || data['Tax Paid (PKR)'] || 0);\n          totalReturns++;\n        } else {\n          onTimeReturns.push({\n            taxpayerId: data.taxpayerId || data.id || data.CNIC,\n            taxpayerName: data.taxpayerName || data.name || data['Taxpayer Name'],\n            filingDate: data.filingDate || data['Filing Date'],\n            taxAmount: data.taxAmount || data['Tax Paid (PKR)'] || 0,\n            status: 'On Time'\n          });\n          totalTaxCollected += (data.taxAmount || data['Tax Paid (PKR)'] || 0);\n          totalReturns++;\n        }\n      } else {\n        // No due date, consider as filed\n        onTimeReturns.push({\n          taxpayerId: data.taxpayerId || data.id || data.CNIC,\n          taxpayerName: data.taxpayerName || data.name || data['Taxpayer Name'],\n          filingDate: data.filingDate || data['Filing Date'],\n          taxAmount: data.taxAmount || data['Tax Paid (PKR)'] || 0,\n          status: 'Filed'\n        });\n        totalTaxCollected += (data.taxAmount || data['Tax Paid (PKR)'] || 0);\n        totalReturns++;\n      }\n    }\n    // If no due date comparison, check if it's a current filing\n    else if (data.status === 'added' || (data.inCurrent === true && (data.taxAmount || data['Tax Paid (PKR)']))) {\n      onTimeReturns.push({\n        taxpayerId: data.taxpayerId || data.id || data.CNIC,\n        taxpayerName: data.taxpayerName || data.name || data['Taxpayer Name'],\n        filingDate: data.filingDate || data['Filing Date'],\n        taxAmount: data.taxAmount || data['Tax Paid (PKR)'] || 0,\n        status: 'Filed'\n      });\n      totalTaxCollected += (data.taxAmount || data['Tax Paid (PKR)'] || 0);\n      totalReturns++;\n    }\n  }\n} else {\n  // Process current data only (no historical comparison)\n  // Analyze based on Filing Date field from current data\n  for (const item of currentData) {\n    const data = item.json;\n    \n    // Extract filing date\n    const filingDateStr = data['Filing Date'] || data.filingDate;\n    \n    if (filingDateStr) {\n      const filingDate = new Date(filingDateStr);\n      const taxAmount = data['Tax Paid (PKR)'] || data.taxAmount || 0;\n      \n      // Check if there's a due date field\n      const dueDateStr = data['Due Date'] || data.dueDate;\n      \n      if (dueDateStr) {\n        const dueDate = new Date(dueDateStr);\n        const daysLate = Math.floor((filingDate - dueDate) / (1000 * 60 * 60 * 24));\n        \n        if (daysLate > 0) {\n          lateReturns.push({\n            taxpayerId: data.CNIC || data.taxpayerId || data.id,\n            taxpayerName: data['Taxpayer Name'] || data.taxpayerName || data.name,\n            filingDate: filingDateStr,\n            dueDate: dueDateStr,\n            daysLate: daysLate,\n            taxAmount: taxAmount,\n            status: 'Late'\n          });\n          totalTaxCollected += taxAmount;\n          totalReturns++;\n        } else {\n          onTimeReturns.push({\n            taxpayerId: data.CNIC || data.taxpayerId || data.id,\n            taxpayerName: data['Taxpayer Name'] || data.taxpayerName || data.name,\n            filingDate: filingDateStr,\n            taxAmount: taxAmount,\n            status: 'On Time'\n          });\n          totalTaxCollected += taxAmount;\n          totalReturns++;\n        }\n      } else {\n        // No due date available, consider all as filed\n        onTimeReturns.push({\n          taxpayerId: data.CNIC || data.taxpayerId || data.id,\n          taxpayerName: data['Taxpayer Name'] || data.taxpayerName || data.name,\n          filingDate: filingDateStr,\n          taxAmount: taxAmount,\n          status: 'Filed'\n        });\n        totalTaxCollected += taxAmount;\n        totalReturns++;\n      }\n    }\n  }\n}\n\n// Calculate summary statistics\nconst summary = {\n  totalReturns: totalReturns,\n  missingReturns: missingReturns.length,\n  lateReturns: lateReturns.length,\n  onTimeReturns: onTimeReturns.length,\n  totalTaxCollected: totalTaxCollected,\n  complianceRate: totalReturns > 0 ? ((onTimeReturns.length / totalReturns) * 100).toFixed(2) : 0,\n  analysisDate: new Date().toISOString(),\n  hasHistoricalData: hasHistoricalData\n};\n\n// Return structured data with all details\nreturn [\n  {\n    json: {\n      summary: summary,\n      missingReturns: missingReturns,\n      lateReturns: lateReturns,\n      onTimeReturns: onTimeReturns,\n      allReturns: [...missingReturns, ...lateReturns, ...onTimeReturns]\n    }\n  }\n];"
+      },
+      "id": "1f32a69b-3955-4a96-a92c-7198ae612090",
+      "name": "Detect Missing and Late Returns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        2912
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "complianceData",
+        "options": {}
+      },
+      "id": "a4ae3a30-fcba-4103-884a-50b8facd99dd",
+      "name": "Aggregate Report Data",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        720,
+        2912
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a compliance report generator for Pakistan's Federal Board of Revenue.\n\nUsing the compliance data from the input, generate a professional HTML email report with:\n\nExecutive Summary Table:\n\nTotal Returns Filed\n\nOn-Time Returns\n\nLate Returns\n\nMissing Returns\n\nCompliance Rate %\n\nTotal Tax Collected (PKR)\n\nDetailed Tables for each category:\n\nOn-Time Returns (green background)\n\nLate Returns (yellow background)\n\nMissing Returns (red background)\n\nEach table should include: Taxpayer Name, CNIC, Filing Date, Tax Amount\n\nReturn only a complete, valid HTML document with <html>, <head>, and <body> tags.\nUse professional inline CSS styling for layout and colors.\n⚠️ Do not include code block formatting (no triple backticks or “html” tags outside the document).\n⚠️ Output pure HTML only.",
+        "options": {}
+      },
+      "id": "9c4755e0-ec68-4071-b3ff-cab4a1cc4cc3",
+      "name": "AI Report Generator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1168,
+        2912
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Workflow Configuration').first().json.officerEmail }}",
+        "subject": "=Daily Tax Return Compliance Report - {{ $now.format('yyyy-MM-dd') }}",
+        "message": "={{ $('AI Report Generator').first().json.output }}",
+        "options": {
+          "appendAttribution": true
+        }
+      },
+      "id": "d496bac8-5ee1-461f-8627-72f0f3efe15f",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1520,
+        2912
+      ],
+      "webhookId": "6fb62d86-df4b-4881-b11d-62bbcbba93ad",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LRqoNSaqhT3K6VSU",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.historicalSheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZsY2rdbggyQPsxOe0grfvTW-To1ankoQpTipaOgIao/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Taxpayer Name": "={{ $json['Taxpayer Name'] }}",
+            "CNIC": "={{ $json.CNIC }}",
+            "Income": "={{ $json['Income (PKR)'] }}",
+            "Declared Assets": "={{ $json['Declared Assets (PKR)'] }}",
+            "Tax Paid": "={{ $json['Tax Paid (PKR)'] }}",
+            "Return Date": "={{ $json['Filing Date'] }}"
+          },
+          "matchingColumns": [
+            "CNIC"
+          ],
+          "schema": [
+            {
+              "id": "Taxpayer Name",
+              "displayName": "Taxpayer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CNIC",
+              "displayName": "CNIC",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Income",
+              "displayName": "Income",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Declared Assets",
+              "displayName": "Declared Assets",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tax Paid",
+              "displayName": "Tax Paid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Return Date",
+              "displayName": "Return Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ae95f9f6-f8bf-433e-8370-5453db0a1798",
+      "name": "Update Historical Records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        272,
+        3136
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0gBRHWN5k3buhvUH",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1geAdCoXm1aS1BQ4OYrzdIjrGhyl3EbMSlezIIUZKIZE",
+          "mode": "list",
+          "cachedResultName": "fbr_tax_returns_sample",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1geAdCoXm1aS1BQ4OYrzdIjrGhyl3EbMSlezIIUZKIZE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1geAdCoXm1aS1BQ4OYrzdIjrGhyl3EbMSlezIIUZKIZE/edit?gid=1490490037#gid=1490490037",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "id": "c4b59368-bebf-452a-b6ac-ce8362a1c11f",
+      "name": "Read Current Tax Returns",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        48,
+        2912
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0gBRHWN5k3buhvUH",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        2960
+      ],
+      "id": "d200489f-67a4-409f-b9b9-bff5bde2de96",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        3136
+      ],
+      "id": "e241ca94-2c89-4339-b6fc-525b941359c9",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Prb3JPAZTxWsXPTO",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format compliance data into a clear text summary for AI processing\nconst inputData = $input.all();\nconst data = inputData[0].json.complianceData[0];\n\n// Extract summary statistics\nconst summary = data.summary;\nconst missingReturns = data.missingReturns || [];\nconst lateReturns = data.lateReturns || [];\nconst onTimeReturns = data.onTimeReturns || [];\n\n// Build formatted text report\nlet report = `TAX RETURN COMPLIANCE REPORT\\n`;\nreport += `Analysis Date: ${summary.analysisDate}\\n\\n`;\n\nreport += `=== EXECUTIVE SUMMARY ===\\n`;\nreport += `Total Returns Filed: ${summary.totalReturns}\\n`;\nreport += `On-Time Returns: ${summary.onTimeReturns}\\n`;\nreport += `Late Returns: ${summary.lateReturns}\\n`;\nreport += `Missing Returns: ${summary.missingReturns}\\n`;\nreport += `Compliance Rate: ${summary.complianceRate}%\\n`;\nreport += `Total Tax Collected: PKR ${summary.totalTaxCollected.toLocaleString()}\\n\\n`;\n\nif (missingReturns.length > 0) {\n  report += `=== MISSING RETURNS (${missingReturns.length}) ===\\n`;\n  missingReturns.forEach((item, index) => {\n    report += `${index + 1}. ${item.taxpayerName} (CNIC: ${item.taxpayerId})\\n`;\n    report += `   Last Filing: ${item.lastFilingDate}\\n`;\n    report += `   Days Overdue: ${item.daysOverdue}\\n\\n`;\n  });\n}\n\nif (lateReturns.length > 0) {\n  report += `=== LATE RETURNS (${lateReturns.length}) ===\\n`;\n  lateReturns.forEach((item, index) => {\n    report += `${index + 1}. ${item.taxpayerName} (CNIC: ${item.taxpayerId})\\n`;\n    report += `   Filing Date: ${item.filingDate}\\n`;\n    report += `   Due Date: ${item.dueDate}\\n`;\n    report += `   Days Late: ${item.daysLate}\\n`;\n    report += `   Tax Amount: PKR ${item.taxAmount.toLocaleString()}\\n\\n`;\n  });\n}\n\nif (onTimeReturns.length > 0) {\n  report += `=== ON-TIME RETURNS (${onTimeReturns.length}) ===\\n`;\n  onTimeReturns.forEach((item, index) => {\n    report += `${index + 1}. ${item.taxpayerName} (CNIC: ${item.taxpayerId})\\n`;\n    report += `   Filing Date: ${item.filingDate}\\n`;\n    report += `   Tax Amount: PKR ${item.taxAmount.toLocaleString()}\\n\\n`;\n  });\n}\n\nreturn [\n  {\n    json: {\n      complianceReport: report,\n      summary: summary,\n      missingReturns: missingReturns,\n      lateReturns: lateReturns,\n      onTimeReturns: onTimeReturns\n    }\n  }\n];"
+      },
+      "id": "117614d1-b224-4118-94f9-4eaf930f1d64",
+      "name": "Format Compliance Data for AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        2912
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Previous Filings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Current Tax Returns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Previous Filings": {
+      "main": [
+        [
+          {
+            "node": "Compare Current vs Previous",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compare Current vs Previous": {
+      "main": [
+        [
+          {
+            "node": "Detect Missing and Late Returns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detect Missing and Late Returns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detect Missing and Late Returns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detect Missing and Late Returns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Missing and Late Returns": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Report Generator": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Current Tax Returns": {
+      "main": [
+        [
+          {
+            "node": "Compare Current vs Previous",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Historical Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Report Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Report Data": {
+      "main": [
+        [
+          {
+            "node": "Format Compliance Data for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Compliance Data for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Report Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1df63180-ed1e-4fa8-a949-25f156c187ad",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e3f406f51004a0182ea80d7a1cb4074f38211bb43a5013ef1c4c708754af7a35"
+  },
+  "id": "U971I0mNV4jc4Y9d",
+  "tags": []
+}
