@@ -1,10 +1,10 @@
 
-AI-Powered Tax Compliance Automation Workflow
+AI-Powered Tax Compliance Automation Workflow:
 
 This workflow automates the entire tax return compliance process from reading the latest filings to generating and emailing smart AI reports. It’s designed for tax teams, accountants, or government departments to save hours of manual work and eliminate reporting errors.
 
 
-How It Works
+How It Works:
 
 Trigger: The process starts manually when clicking “Execute workflow”.
 
