@@ -66,7 +66,7 @@ Email Service: Gmail Node
 
 Data Storage: Google Sheets
 
-Watch Workflow Demo: [https://drive.google.com/file/d/1vGkJa37ax_74t1FoMq6IUCIpp_mE_1rQ/view?usp=drive_link]
+Watch Workflow Demo: [https://drive.google.com/file/d/1ip4CuJrj5XMrsEcR8-iw-e1z0sy_mM8u/view?usp=drive_link]
 
 
 Developed by:
